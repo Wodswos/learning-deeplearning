@@ -1,3 +1,3 @@
-基于 Andrej Karpathy 的课程和 micrograd 手写的自动求导框架。
+# 说明
 
-https://www.youtube.com/watch?v=VMj-3S1tku0
+基于Andrej Karpathy的 [Youtube 课程](https://www.youtube.com/watch?v=VMj-3S1tku0) 和 micrograd 实现的自动求导框架。

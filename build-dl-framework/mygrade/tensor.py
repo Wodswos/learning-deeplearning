@@ -122,4 +122,3 @@ if __name__ == '__main__':
     assert b.grad == 6
 
     # operation between Scalar and Python data type (int/float).
-    
