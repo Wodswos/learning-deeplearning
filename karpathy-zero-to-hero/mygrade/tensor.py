@@ -1,30 +1,51 @@
 import math
 
 
+# 四则运算 + 指数运算应该肯定是要实现的
+# 在此基础上应该就能实现大部分初等函数的 forward/backward
+# 话说回来，四则这种基础运算和初等函数的关系是什么？？
 class Scalar():
     def __init__(self, value, prev=(), grad=0) -> None:
         self.value = value
         self.grad = grad
 
-        # self._prev 是计算图的前驱节点，当然是对于前向计算过程而言的
-        # 对于反向传播过程而言，self._prev 就是后继节点了
+        # self._prev 是计算图的前驱节点——当然是对于前向计算过程而言的
         self._prev = prev
 
     def __repr__(self) -> str:
         return f'Scalar(value={self.value})'
 
     def convert(self, input) -> "Scalar":
+        if isinstance(input, Scalar):
+            return input
+
         # convert int/float to value.
-        return Scalar(input)
+        try:
+            scalar_instance = Scalar(input)
+        except Exception:
+            raise RuntimeError(f"Object Type {type(input)} can't convert to Scalar.")
+
+        return scalar_instance
+
+    def __neg__(self):
+        output = Scalar(
+            -self.value,
+            prev=(self,)
+        )
+
+        def _backward() -> None:
+            self.grad = self.grad - output.grad
+
+        output._backward = _backward
+
+        return output
 
     def __add__(self, other):
-        try:
-            other = other if isinstance(other, Scalar) else self.convert(other)
-        except Exception:
-            raise RuntimeError(f"Object Type {type(other)} can't operate with Scalar.")
+        other = self.convert(other)
 
         output = Scalar(self.value + other.value, prev=(self, other))
 
+        # 这里是直接把函数赋值给 output 的属性，所以定义时不需要 self 参数
         def _backward() -> None:
             # 很容易想到的代码实现是： self.grad= output.grad; other.grad = output.grad
             # If self & other 是两个独立变量，这很 OK. But:
@@ -38,28 +59,100 @@ class Scalar():
             other.grad = other.grad + output.grad
 
         output._backward = _backward
+
         return output
 
     def __radd__(self, other):
+        # 加法 & 乘法满足交换律，可以直接这么写
+        # 减法 & 除法就需要 convert other 变量并调用 other.__xxx__(self) 了
         return self.__add__(other)
 
-    def __mul__(self, other):
-        try:
-            other = other if isinstance(other, Scalar) else self.convert(other)
-        except Exception:
-            raise RuntimeError(f"Object Type {type(other)} can't operate with Scalar.")
+    def __sub__(self, other):
+        other = self.convert(other)
 
-        output = Scalar(self.value * other.value, prev=(self, other))
+        output = Scalar(
+            self.value - other.value,
+            prev=(self, other,)
+        )
+
+        def _backward() -> None:
+            self.grad = self.grad + output.grad
+            other.grad = other.grad - output.grad
+
+        output._backward = _backward
+
+        return output
+
+    def __rsub__(self, other):
+        other = self.convert(other)
+        return other.__sub__(self)
+
+    def __mul__(self, other):
+        other = self.convert(other)
+
+        output = Scalar(
+            self.value * other.value,
+            prev=(self, other,)
+        )
 
         def _backward() -> None:
             self.grad = self.grad + other.value * output.grad
             other.grad = other.grad + self.value * output.grad
 
         output._backward = _backward
+
         return output
 
     def __rmul__(self, other):
         return self.__mul__(other)
+
+    def __truediv__(self, other):
+        other = self.convert(other)
+
+        output = Scalar(
+            self.value / other.value,
+            prev=(self, other,)
+        )
+
+        def _backward() -> None:
+            self.grad = self.grad + output.grad * (1 / other.value)
+            other.grad = other.grad + output.grad * (- self.value / (other.value ** 2))
+
+        output._backward = _backward
+
+        return output
+
+    def __rtruediv__(self, other):
+        other = self.convert(other)
+        return other.__truediv__(self)
+
+    def __pow__(self, exponent):
+        exponent = self.convert(exponent)
+
+        output = Scalar(
+            value=self.value ** exponent.value,
+            prev=(self, exponent,)
+        )
+
+        def _backward() -> None:
+            # 应用幂函数求导规则
+            self.grad = self.grad + output.grad * (exponent.value * self.value ** (exponent.value - 1))
+            # 应用指数函数求导规则
+            exponent.grad = exponent.grad + output.grad * (self.value ** exponent.value * math.log(self.value))
+
+        output._backward = _backward
+
+        return output
+
+    def __rpow__(self, base):
+        base = self.convert(base)
+        return base.__pow__(self)
+
+    def tanh(self):
+        e = Scalar(math.e)
+        output = (1 - e ** (-2 * self)) / (1 + e ** (-2 * self))
+
+        return output
 
     def _backward(self) -> None:
         # default backward, do nothing
@@ -84,45 +177,32 @@ class Scalar():
         _topo_sort(self)
         # 需要注意，由于是依据出度得来的拓扑序，所以需要反转一下
         sorted_queue.reverse()
-        print(sorted_queue)
+        # print(sorted_queue)
 
         # 反向传播
         self.grad = 1
         for node in sorted_queue:
-            print(node)
+            # print(node)
             node._backward()
 
 
 def tanh(input: Scalar) -> Scalar:
-    def _backward() -> None:
-        # backward to input
-        pass
-
-    output = Scalar(
-        (1 - math.exp(-2 * input.value)) / (1 + math.exp(-2 * input.value))
-    )
-    output._backward = _backward
+    # 下面这种写法的代价是会有十几个中间变量——但我不 care 性能
+    # 可以手写 tanh forward 和 backward，把大量的中间变量去掉
+    output = (1 - math.e ** (-2 * input)) / (1 + math.e ** (-2 * input))
 
     return output
 
 
 if __name__ == '__main__':
+    # 验证代码不拆分，视为 Test case，每次执行全跑一遍，怎么不算一种 CI 呢 😄
+
     # test basic arithmetic operation
     a = Scalar(4)
     b = Scalar(3)
 
     print(f'a + b = {a + b}')
     print(f'a * b = {a * b}')
-
-    # test tanh function
-    x = Scalar(100)
-    print(f'tanh({x}) = {tanh(x)}')
-
-    x.value = 0
-    print(f'tanh({x}) = {tanh(x)}')
-
-    x.value = -10
-    print(f'tanh({x}) = {tanh(x)}')
 
     # test topological sort, 暂时还没实现 reset grad
     # simple test 1
@@ -151,3 +231,25 @@ if __name__ == '__main__':
     assert c.grad == 2
     assert a.grad == 8
     assert b.grad == 6
+
+    # test divide
+
+    # test tanh function
+    logits = Scalar(100)
+    activation = tanh(logits)
+    activation.backward()
+    print(f'tanh({logits}) = {activation}, grad is {logits.grad}')
+
+    logits = Scalar(0)
+    activation = tanh(logits)
+    activation.backward()
+    print(f'tanh({logits}) = {activation}, grad is {logits.grad}')
+
+    logits = Scalar(-10)
+    activation = tanh(logits)
+    activation.backward()
+    print(f'tanh({logits}) = {activation}, grad is {logits.grad}')
+
+    # from utils import draw_dot
+    # dot = draw_dot(activation)
+    # dot.render('calculate_tanh', view=False)
