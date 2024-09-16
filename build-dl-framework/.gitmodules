@@ -1,9 +1,0 @@
-[submodule "pytorch-repo"]
-	path = pytorch-repo
-	url = https://github.com/pytorch/pytorch.git
-[submodule "tensorflow-repo"]
-	path = tensorflow-repo
-	url = https://github.com/tensorflow/tensorflow.git
-[submodule "jax-repo"]
-	path = jax-repo
-	url = https://github.com/google/jax.git

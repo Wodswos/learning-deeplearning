@@ -13,7 +13,16 @@ class Scalar():
     def __repr__(self) -> str:
         return f'Scalar(value={self.value})'
 
-    def __add__(self, other: "Scalar"):
+    def convert(self, input) -> "Scalar":
+        # convert int/float to value.
+        return Scalar(input)
+
+    def __add__(self, other):
+        try:
+            other = other if isinstance(other, Scalar) else self.convert(other)
+        except Exception:
+            raise RuntimeError(f"Object Type {type(other)} can't operate with Scalar.")
+
         output = Scalar(self.value + other.value, prev=(self, other))
 
         def _backward() -> None:
@@ -31,7 +40,15 @@ class Scalar():
         output._backward = _backward
         return output
 
-    def __mul__(self, other: "Scalar"):
+    def __radd__(self, other):
+        return self.__add__(other)
+
+    def __mul__(self, other):
+        try:
+            other = other if isinstance(other, Scalar) else self.convert(other)
+        except Exception:
+            raise RuntimeError(f"Object Type {type(other)} can't operate with Scalar.")
+
         output = Scalar(self.value * other.value, prev=(self, other))
 
         def _backward() -> None:
@@ -41,9 +58,12 @@ class Scalar():
         output._backward = _backward
         return output
 
+    def __rmul__(self, other):
+        return self.__mul__(other)
+
     def _backward(self) -> None:
         # default backward, do nothing
-        return 1
+        pass
 
     def backward(self) -> None:
         sorted_queue = []
@@ -122,3 +142,12 @@ if __name__ == '__main__':
     assert b.grad == 6
 
     # operation between Scalar and Python data type (int/float).
+    a = Scalar(3.0)
+    b = Scalar(4.0)
+    c = a * b
+    d = c * 2
+    d.backward()
+
+    assert c.grad == 2
+    assert a.grad == 8
+    assert b.grad == 6
